@@ -15,13 +15,22 @@ export interface Goal {
   level: string;
   description?: string;
   is_active: boolean;
+  practice_projects?: PracticeProject[];
 }
+
+export interface PracticeProject {
+  name: string;
+  description: string;
+}
+
+export type DsaLanguage = "python" | "java" | "cpp" | "javascript" | "go";
 
 export interface Profile {
   id: string;
   resume_parsed?: Record<string, unknown>;
   github_data?: Record<string, unknown>;
   skills_extracted?: Record<string, unknown>;
+  preferred_dsa_language?: DsaLanguage;
   gap_analysis?: {
     critical_gaps?: string[];
     nice_to_have_gaps?: string[];
@@ -37,16 +46,40 @@ export interface Roadmap {
   status: string;
   milestones?: Milestone[];
   goal_id: string;
+  version?: number;
+  completion_pct?: number;
   created_at: string;
 }
 
 export interface Milestone {
+  id?: string;
   title: string;
   description?: string;
   week_start?: number;
   week_end?: number;
-  tasks?: { title: string; description?: string; resources?: string[] }[];
+  status?: string;
+  tasks?: {
+    title: string;
+    description?: string;
+    task_type?: "practice" | "project";
+    resources?: string[];
+    completed?: boolean;
+    completed_at?: string | null;
+  }[];
   success_criteria?: string;
+}
+
+export interface ProgressData {
+  summary: string;
+  interview_scores: { score: number; role_context: string; date: string }[];
+  gap_improvements: string[];
+  recent_memory: string[];
+  completion_pct: number;
+  total_study_hours: number;
+  completed_topics: string[];
+  weak_areas: { topic: string; count: number; source: string }[];
+  current_week?: number | null;
+  readiness_score?: number | null;
 }
 
 export interface InterviewSession {
@@ -76,6 +109,9 @@ export interface AnalysisJob {
   id: string;
   status: string;
   result?: {
+    step?: string;
+    step_label?: string;
+    phase?: string;
     gap_analysis?: Profile["gap_analysis"];
     roadmap_id?: string;
     readiness_score?: number;
@@ -101,10 +137,36 @@ async function request<T>(
     headers["Content-Type"] = "application/json";
   }
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  let res!: Response;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      res = await fetch(`${API_URL}${path}`, { ...options, headers });
+      lastError = null;
+      break;
+    } catch (err) {
+      lastError = err;
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 1500));
+        continue;
+      }
+    }
+  }
+  if (lastError) {
+    throw new Error(
+      `Cannot reach the API at ${API_URL}. Wait for Docker to finish starting (backend healthcheck), then refresh.`
+    );
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || "Request failed");
+    const detail = err.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join(", ")
+          : "Request failed";
+    throw new Error(message || "Request failed");
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -161,13 +223,88 @@ export const api = {
 
   getInterview: (id: string) => request<InterviewSession>(`/interviews/${id}`),
 
-  getProgress: () =>
+  getProgress: () => request<ProgressData>("/progress/me"),
+
+  completeTask: (
+    roadmapId: string,
+    milestoneId: string,
+    taskIndex: number,
+    studyMinutes = 0,
+    completed = true
+  ) =>
+    request<{ completion_pct: number }>(
+      `/roadmaps/${roadmapId}/tasks/${milestoneId}/${taskIndex}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ study_minutes: studyMinutes, completed }),
+      }
+    ),
+
+  updateProfilePreferences: (preferred_dsa_language: DsaLanguage) =>
+    request<Profile>("/profiles/me/preferences", {
+      method: "PATCH",
+      body: JSON.stringify({ preferred_dsa_language }),
+    }),
+
+  getPracticeProjects: (goalId: string) =>
+    request<PracticeProject[]>(`/goals/${goalId}/practice-projects`),
+
+  updatePracticeProjects: (goalId: string, projects: PracticeProject[]) =>
+    request<PracticeProject[]>(`/goals/${goalId}/practice-projects`, {
+      method: "PUT",
+      body: JSON.stringify({ projects }),
+    }),
+
+  recalculateRoadmap: (roadmapId: string) =>
+    request<Roadmap>(`/roadmaps/${roadmapId}/recalculate`, { method: "POST" }),
+
+  logStudySession: (data: { goal_id: string; topic: string; duration_minutes: number; notes?: string }) =>
+    request<{ total_study_hours: number }>("/progress/study-session", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  askCoach: (question: string, goalId?: string) =>
     request<{
-      summary: string;
-      interview_scores: { score: number; role_context: string; date: string }[];
-      gap_improvements: string[];
-      recent_memory: string[];
-    }>("/progress/me"),
+      answer: string;
+      citations: { content: string; chunk_type: string; score: number }[];
+      weak_area_stats: { topic: string; occurrence_count: number }[];
+    }>("/memory/ask", {
+      method: "POST",
+      body: JSON.stringify({ question, goal_id: goalId ?? null }),
+    }),
+
+  saveVoiceSummary: (data: {
+    goal_id?: string;
+    summary: string;
+    score?: number;
+    improvements?: string[];
+    strengths?: string[];
+  }) =>
+    request<{ session_id: string }>("/interviews/voice/summary", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  getLiveKitToken: (params?: {
+    goalId?: string;
+    roadmapId?: string;
+    milestoneId?: string;
+  }) =>
+    request<{
+      token: string;
+      url: string;
+      room_name: string;
+      identity: string;
+      focus_label?: string | null;
+    }>("/livekit/token", {
+      method: "POST",
+      body: JSON.stringify({
+        goal_id: params?.goalId ?? null,
+        roadmap_id: params?.roadmapId ?? null,
+        milestone_id: params?.milestoneId ?? null,
+      }),
+    }),
 };
 
 export function isGitHubAuthConfigured(): boolean {

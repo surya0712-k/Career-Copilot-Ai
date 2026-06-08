@@ -7,6 +7,7 @@ import {
   api,
   Goal,
   Profile,
+  ProgressData,
   Roadmap,
   User,
 } from "@/lib/api";
@@ -16,6 +17,7 @@ import {
   CheckCircle,
   LogOut,
   MessageSquare,
+  Mic,
   Target,
   TrendingUp,
 } from "lucide-react";
@@ -26,8 +28,9 @@ export default function DashboardPage() {
   const [goal, setGoal] = useState<Goal | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
-  const [progress, setProgress] = useState<string>("");
+  const [progress, setProgress] = useState<ProgressData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [roadmapLoading, setRoadmapLoading] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -46,15 +49,68 @@ export default function DashboardPage() {
         setUser(u);
         setGoal(g);
         setProfile(p);
-        if (prog) setProgress(prog.summary);
+        if (prog) setProgress(prog);
         if (g) {
           const rm = await api.getLatestRoadmap(g.id).catch(() => null);
           setRoadmap(rm);
+          if (!rm && localStorage.getItem("pendingAnalysisJob")) {
+            setRoadmapLoading(true);
+          }
         }
       })
       .catch(() => router.push("/login"))
       .finally(() => setLoading(false));
   }, [router]);
+
+  useEffect(() => {
+    if (!goal || roadmap || !roadmapLoading) return;
+
+    let cancelled = false;
+    const pendingJobId = localStorage.getItem("pendingAnalysisJob");
+
+    const poll = async () => {
+      try {
+        const rm = await api.getLatestRoadmap(goal.id).catch(() => null);
+        if (cancelled) return;
+        if (rm) {
+          setRoadmap(rm);
+          setRoadmapLoading(false);
+          localStorage.removeItem("pendingAnalysisJob");
+          return;
+        }
+        if (pendingJobId) {
+          try {
+            const job = await api.getAnalysisJob(pendingJobId);
+            if (job.status === "completed" && job.result?.roadmap_id) {
+              const rmById = await api.getRoadmap(job.result.roadmap_id);
+              setRoadmap(rmById);
+              setRoadmapLoading(false);
+              localStorage.removeItem("pendingAnalysisJob");
+              return;
+            }
+            if (job.status === "failed") {
+              setRoadmapLoading(false);
+              localStorage.removeItem("pendingAnalysisJob");
+              return;
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "";
+            if (message.includes("Job not found")) {
+              localStorage.removeItem("pendingAnalysisJob");
+            }
+          }
+        }
+      } catch {
+        /* keep polling */
+      }
+      if (!cancelled) setTimeout(poll, 1500);
+    };
+
+    poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [goal, roadmap, roadmapLoading]);
 
   function logout() {
     localStorage.removeItem("token");
@@ -92,6 +148,21 @@ export default function DashboardPage() {
       </nav>
 
       <div className="mx-auto max-w-6xl px-6 py-8">
+        {!goal && (
+          <div className="card mb-8 text-center">
+            <Target className="mx-auto mb-4 h-12 w-12 text-brand-500" />
+            <h1 className="mb-2 text-2xl font-bold">Welcome to Career Copilot</h1>
+            <p className="mb-6 text-white/60">
+              Add a career goal to upload your resume, run gap analysis, and get a personalized
+              roadmap with practice tasks and application projects.
+            </p>
+            <Link href="/onboarding" className="btn-primary inline-flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              Add a Goal
+            </Link>
+          </div>
+        )}
+
         {goal && (
           <div className="card mb-8">
             <div className="flex items-center gap-3">
@@ -154,6 +225,15 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {roadmapLoading && !roadmap && (
+          <div className="card mb-8">
+            <p className="text-sm text-brand-300">Building your personalized roadmap...</p>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full w-1/3 animate-pulse bg-brand-500" />
+            </div>
+          </div>
+        )}
+
         {roadmap && (
           <div className="card mb-8">
             <div className="mb-4 flex items-center justify-between">
@@ -162,40 +242,107 @@ export default function DashboardPage() {
                 View Full Roadmap
               </Link>
             </div>
+            {roadmap.completion_pct !== undefined && (
+              <div className="mb-4">
+                <div className="mb-1 flex justify-between text-xs text-white/50">
+                  <span>Completion</span>
+                  <span>{roadmap.completion_pct}%</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full bg-brand-500"
+                    style={{ width: `${roadmap.completion_pct}%` }}
+                  />
+                </div>
+              </div>
+            )}
             <div className="space-y-3">
               {roadmap.milestones?.slice(0, 3).map((m, i) => (
                 <div key={i} className="rounded-lg bg-white/5 p-4">
                   <p className="font-medium">
-                    Week {m.week_start}-{m.week_end}: {m.title}
+                    Week {i + 1}: {m.title}
                   </p>
                   <p className="mt-1 text-sm text-white/50">{m.description}</p>
                 </div>
               ))}
+              {(roadmap.milestones?.length ?? 0) > 3 && (
+                <Link
+                  href={`/roadmap/${roadmap.id}`}
+                  className="block text-center text-sm text-brand-400 hover:text-brand-300 hover:underline"
+                >
+                  ...more ({roadmap.milestones!.length - 3} more week
+                  {roadmap.milestones!.length - 3 === 1 ? "" : "s"})
+                </Link>
+              )}
             </div>
           </div>
         )}
 
         {progress && (
           <div className="card mb-8">
-            <h2 className="mb-2 flex items-center gap-2 font-semibold">
+            <h2 className="mb-4 flex items-center gap-2 font-semibold">
               <TrendingUp className="h-5 w-5 text-brand-500" />
               Progress Summary
             </h2>
-            <p className="text-sm text-white/70">{progress}</p>
+            <p className="mb-4 text-sm text-white/70">{progress.summary}</p>
+            <div className="grid gap-4 sm:grid-cols-3 text-sm">
+              <div>
+                <p className="text-white/40">Roadmap</p>
+                <p className="text-lg font-semibold text-brand-400">{progress.completion_pct}%</p>
+              </div>
+              <div>
+                <p className="text-white/40">Study hours</p>
+                <p className="text-lg font-semibold">{progress.total_study_hours.toFixed(1)}h</p>
+              </div>
+              <div>
+                <p className="text-white/40">Topics done</p>
+                <p className="text-lg font-semibold">{progress.completed_topics.length}</p>
+              </div>
+            </div>
+            {progress.weak_areas.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {progress.weak_areas.slice(0, 5).map((w) => (
+                  <span
+                    key={w.topic}
+                    className="rounded-full bg-red-500/10 px-3 py-1 text-xs text-red-300"
+                  >
+                    {w.topic} ({w.count}x)
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4">
+          <Link href="/coach" className="btn-primary inline-flex items-center gap-2">
+            <Brain className="h-5 w-5" />
+            Ask Coach
+          </Link>
           <Link
-            href="/interview/new"
+            href="/interview/voice"
             className="btn-primary inline-flex items-center gap-2"
           >
+            <Mic className="h-5 w-5" />
+            Voice Interview (LiveKit)
+          </Link>
+          <Link
+            href="/interview/new"
+            className="btn-secondary inline-flex items-center gap-2"
+          >
             <MessageSquare className="h-5 w-5" />
-            Start Mock Interview
+            Text Interview
           </Link>
-          <Link href="/onboarding" className="btn-secondary">
-            Update Goal
-          </Link>
+          {goal ? (
+            <Link href="/onboarding" className="btn-secondary">
+              Update Goal
+            </Link>
+          ) : (
+            <Link href="/onboarding" className="btn-primary inline-flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              Add a Goal
+            </Link>
+          )}
         </div>
       </div>
     </main>

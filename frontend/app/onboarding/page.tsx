@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { Brain, Upload } from "lucide-react";
+import { ArrowLeft, Brain, Upload } from "lucide-react";
 
 const LEVELS = [
   { value: "internship", label: "Internship" },
@@ -16,24 +17,52 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [hasResume, setHasResume] = useState(false);
   const [company, setCompany] = useState("Google");
   const [role, setRole] = useState("Software Engineer");
   const [level, setLevel] = useState("internship");
   const [loading, setLoading] = useState(false);
+  const [checkingProfile, setCheckingProfile] = useState(true);
+  const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    api
+      .getProfile()
+      .then((profile) => {
+        if (profile.resume_parsed) {
+          setHasResume(true);
+        }
+      })
+      .catch(() => {
+        /* new user — no profile yet */
+      })
+      .finally(() => setCheckingProfile(false));
+  }, [router]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!resumeFile) {
+    if (!resumeFile && !hasResume) {
       setError("Please upload your resume");
       return;
     }
 
     setLoading(true);
     setError(null);
+    setProgressLabel("Uploading resume and starting analysis...");
 
     try {
-      await api.uploadResume(resumeFile);
+      if (resumeFile) {
+        await api.uploadResume(resumeFile);
+        setHasResume(true);
+      }
+      setProgressLabel("Saving your career goal...");
       const goal = await api.createGoal({
         target_company: company,
         target_role: role,
@@ -41,31 +70,70 @@ export default function OnboardingPage() {
         description: `I want a ${company} ${role} ${level}`,
       });
       const job = await api.runAnalysis(goal.id);
+      setProgressLabel("Reviewing GitHub & detecting skill gaps...");
 
-      const poll = async () => {
-        const status = await api.getAnalysisJob(job.id);
-        if (status.status === "completed") {
-          router.push("/dashboard");
-        } else if (status.status === "failed") {
-          setError(status.error || "Analysis failed");
+      const poll = async (attempt = 0) => {
+        try {
+          const status = await api.getAnalysisJob(job.id);
+          if (status.result?.step_label) {
+            setProgressLabel(status.result.step_label);
+          }
+          if (status.status === "completed") {
+            localStorage.removeItem("pendingAnalysisJob");
+            router.push("/dashboard");
+          } else if (
+            status.status === "running" &&
+            (status.result?.phase === "gaps_ready" || status.result?.gap_analysis)
+          ) {
+            localStorage.setItem("pendingAnalysisJob", job.id);
+            router.push("/dashboard");
+          } else if (status.status === "failed") {
+            setError(status.error || "Analysis failed");
+            setLoading(false);
+            setProgressLabel(null);
+          } else {
+            setTimeout(() => poll(0), 1500);
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "";
+          if (message.includes("Job not found") && attempt < 5) {
+            setTimeout(() => poll(attempt + 1), 500);
+            return;
+          }
+          setError(message || "Analysis failed");
           setLoading(false);
-        } else {
-          setTimeout(poll, 3000);
+          setProgressLabel(null);
         }
       };
       poll();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setLoading(false);
+      setProgressLabel(null);
     }
+  }
+
+  if (checkingProfile) {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+      </main>
+    );
   }
 
   return (
     <main className="min-h-screen px-6 py-12">
       <div className="mx-auto max-w-2xl">
+        <Link
+          href="/dashboard"
+          className="mb-6 inline-flex items-center gap-2 text-sm text-white/60 hover:text-white"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+        </Link>
+
         <div className="mb-8 flex items-center gap-2">
           <Brain className="h-8 w-8 text-brand-500" />
-          <h1 className="text-2xl font-bold">Set Up Your Career Copilot</h1>
+          <h1 className="text-2xl font-bold">Set Up Your Career Goal</h1>
         </div>
 
         <div className="mb-8 flex gap-2">
@@ -81,6 +149,11 @@ export default function OnboardingPage() {
           {step === 1 && (
             <>
               <h2 className="text-lg font-semibold">Upload Your Resume</h2>
+              {hasResume && (
+                <p className="text-sm text-green-400">
+                  Resume already on file. Upload a new PDF to replace it, or continue to set your goal.
+                </p>
+              )}
               <label className="flex cursor-pointer flex-col items-center gap-4 rounded-lg border-2 border-dashed border-white/20 p-10 transition hover:border-brand-500">
                 <Upload className="h-10 w-10 text-white/40" />
                 <span className="text-white/60">
@@ -96,7 +169,7 @@ export default function OnboardingPage() {
               <button
                 type="button"
                 className="btn-primary w-full"
-                disabled={!resumeFile}
+                disabled={!resumeFile && !hasResume}
                 onClick={() => setStep(2)}
               >
                 Continue
@@ -147,12 +220,15 @@ export default function OnboardingPage() {
                 </div>
               </div>
               {error && <p className="text-sm text-red-400">{error}</p>}
+              {loading && progressLabel && (
+                <p className="text-sm text-brand-300">{progressLabel}</p>
+              )}
               <div className="flex gap-3">
                 <button type="button" className="btn-secondary" onClick={() => setStep(1)}>
                   Back
                 </button>
                 <button type="submit" className="btn-primary flex-1" disabled={loading}>
-                  {loading ? "Analyzing your profile..." : "Start Analysis"}
+                  {loading ? progressLabel || "Analyzing your profile..." : "Start Analysis"}
                 </button>
               </div>
             </>
