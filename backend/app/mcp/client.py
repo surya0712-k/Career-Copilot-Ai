@@ -25,17 +25,10 @@ class MCPClient:
     async def company_research(self, company: str, role: str, level: str = "internship") -> dict[str, Any]:
         from app.mcp.server import _duckduckgo_search
 
-        queries = [
-            f"{company} {role} {level} interview process",
-            f"{company} {role} requirements skills",
-            f"{company} {level} interview questions",
-        ]
-        search_results = []
-        for q in queries:
-            results = await _duckduckgo_search(q, max_results=3)
-            search_results.extend(results)
+        query = f"{company} {role} {level} interview requirements skills"
+        search_results = await _duckduckgo_search(query, max_results=5)
 
-        snippets = [r["title"] for r in search_results[:10]]
+        snippets = [r["title"] for r in search_results[:8]]
         return {
             "company": company,
             "role": role,

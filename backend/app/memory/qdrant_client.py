@@ -10,7 +10,10 @@ from qdrant_client.models import (
 from app.config import get_settings
 
 settings = get_settings()
-VECTOR_SIZE = 1536
+
+
+def get_vector_size() -> int:
+    return settings.embedding_dimensions
 
 
 @lru_cache
@@ -28,7 +31,7 @@ async def ensure_collection() -> None:
     if not exists:
         await client.create_collection(
             collection_name=collection,
-            vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
+            vectors_config=VectorParams(size=get_vector_size(), distance=Distance.COSINE),
         )
         await client.create_payload_index(
             collection_name=collection,
@@ -38,5 +41,10 @@ async def ensure_collection() -> None:
         await client.create_payload_index(
             collection_name=collection,
             field_name="chunk_type",
+            field_schema=PayloadSchemaType.KEYWORD,
+        )
+        await client.create_payload_index(
+            collection_name=collection,
+            field_name="goal_id",
             field_schema=PayloadSchemaType.KEYWORD,
         )

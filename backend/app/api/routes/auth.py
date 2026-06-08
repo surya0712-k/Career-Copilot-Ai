@@ -31,13 +31,18 @@ async def github_auth(body: GitHubAuthRequest, db: AsyncSession = Depends(get_db
         token_data = token_resp.json()
         access_token = token_data.get("access_token")
         if not access_token:
-            raise HTTPException(status_code=400, detail="Failed to get GitHub access token")
+            error = token_data.get("error_description") or token_data.get("error") or "Invalid or expired authorization code"
+            raise HTTPException(status_code=400, detail=error)
 
         user_resp = await client.get(
             "https://api.github.com/user",
             headers={"Authorization": f"Bearer {access_token}"},
         )
-        user_resp.raise_for_status()
+        if user_resp.status_code != 200:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to fetch GitHub profile. Please try signing in again.",
+            )
         gh_user = user_resp.json()
 
     result = await db.execute(select(User).where(User.github_id == str(gh_user["id"])))

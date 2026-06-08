@@ -38,6 +38,7 @@ class GoalResponse(BaseModel):
     level: str
     description: str | None = None
     is_active: bool
+    practice_projects: list[dict] | None = None
 
     model_config = {"from_attributes": True}
 
@@ -48,8 +49,25 @@ class ProfileResponse(BaseModel):
     github_data: dict | None = None
     skills_extracted: dict | None = None
     gap_analysis: dict | None = None
+    preferred_dsa_language: str = "python"
 
     model_config = {"from_attributes": True}
+
+
+class ProfilePreferencesUpdate(BaseModel):
+    preferred_dsa_language: str = Field(
+        default="python",
+        pattern="^(python|java|cpp|javascript|go)$",
+    )
+
+
+class PracticeProject(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+
+
+class PracticeProjectsUpdate(BaseModel):
+    projects: list[PracticeProject] = Field(default_factory=list, max_length=2)
 
 
 class AnalysisRunRequest(BaseModel):
@@ -73,6 +91,8 @@ class RoadmapResponse(BaseModel):
     status: str
     milestones: list | None = None
     goal_id: uuid.UUID
+    version: int = 1
+    completion_pct: float | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -115,3 +135,46 @@ class ProgressResponse(BaseModel):
     interview_scores: list[dict]
     gap_improvements: list[str]
     recent_memory: list[str]
+    completion_pct: float = 0.0
+    total_study_hours: float = 0.0
+    completed_topics: list[str] = Field(default_factory=list)
+    weak_areas: list[dict] = Field(default_factory=list)
+    current_week: int | None = None
+    readiness_score: float | None = None
+
+
+class TaskCompleteRequest(BaseModel):
+    study_minutes: int = 0
+    completed: bool = True
+
+
+class StudySessionCreate(BaseModel):
+    goal_id: uuid.UUID
+    topic: str
+    duration_minutes: int
+    notes: str | None = None
+
+
+class MemoryNoteCreate(BaseModel):
+    content: str
+    goal_id: uuid.UUID | None = None
+
+
+class MemoryAskRequest(BaseModel):
+    question: str
+    goal_id: uuid.UUID | None = None
+
+
+class MemoryAskResponse(BaseModel):
+    answer: str
+    citations: list[dict]
+    weak_area_stats: list[dict]
+    progress: dict
+
+
+class VoiceInterviewSummary(BaseModel):
+    goal_id: uuid.UUID | None = None
+    summary: str
+    score: float | None = None
+    improvements: list[str] = Field(default_factory=list)
+    strengths: list[str] = Field(default_factory=list)

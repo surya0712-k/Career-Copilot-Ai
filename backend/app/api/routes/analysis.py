@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -5,20 +6,92 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.graph import run_full_onboarding
+from app.agents.graph import run_full_onboarding, run_profile_phase, run_roadmap_phase
+from app.agents.nodes.profile import _collect_memory_chunks
 from app.api.deps import get_current_user
 from app.db.session import AsyncSessionLocal, get_db
 from app.memory.qdrant_client import ensure_collection
-from app.models import AnalysisJob, Goal, Milestone, Profile, Roadmap, User
+from app.memory.store import MemoryStore
+from app.memory.types import ROADMAP_UPDATE
+from app.models import AnalysisJob, Goal, Profile, User
+from app.observability.timing import TimingReport, timed_step
 from app.schemas import AnalysisJobResponse, AnalysisRunRequest, ProfileResponse
+from app.config import get_settings
+from app.services.career.roadmap import RoadmapService
+from app.services.progress_service import get_or_create_progress
 
 router = APIRouter()
 
+STEP_LABELS = {
+    "profile": "Reviewing GitHub & detecting skill gaps...",
+    "gaps_ready": "Gaps ready — building your roadmap...",
+    "roadmap": "Building your personalized roadmap...",
+    "saving": "Saving results...",
+}
 
-async def _run_analysis_job(job_id: uuid.UUID, user_id: uuid.UUID, goal_id: uuid.UUID):
+
+async def _update_job_step(job_id: uuid.UUID, step: str, extra: dict | None = None) -> None:
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(AnalysisJob).where(AnalysisJob.id == job_id))
+        job = result.scalar_one_or_none()
+        if job and job.status == "running":
+            payload = {**(job.result or {}), "step": step, "step_label": STEP_LABELS.get(step, step)}
+            if extra:
+                payload.update(extra)
+            job.result = payload
+            await db.commit()
+
+
+async def _write_deferred_memory(
+    user_id: uuid.UUID,
+    goal_id: uuid.UUID,
+    roadmap_id: uuid.UUID,
+    chunks: list[tuple[str, str, dict | None]],
+    roadmap_data: dict,
+) -> None:
     async with AsyncSessionLocal() as db:
         try:
-            await ensure_collection()
+            async with timed_step(None, "deferred_memory"):
+                store = MemoryStore(db)
+                if chunks:
+                    await store.store_chunks_parallel(user_id, chunks, goal_id=goal_id)
+                if roadmap_data:
+                    summaries = [
+                        f"Week {m.get('week_start')}-{m.get('week_end')}: {m.get('title')}"
+                        for m in roadmap_data.get("milestones", [])
+                    ]
+                    content = f"Roadmap '{roadmap_data.get('title', '')}': " + "; ".join(summaries)
+                    await store.store_chunk(
+                        user_id,
+                        content,
+                        ROADMAP_UPDATE,
+                        goal_id=goal_id,
+                        metadata={"roadmap": roadmap_data},
+                        source_id=str(roadmap_id),
+                        upsert=True,
+                    )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+
+
+def _collect_memory_chunks_from_state(result: dict) -> list[tuple[str, str, dict | None]]:
+    return _collect_memory_chunks(
+        {
+            "resume_analysis": result.get("resume_analysis"),
+            "github_analysis": result.get("github_analysis"),
+            "gap_analysis": result.get("gap_analysis"),
+        }
+    )
+
+
+async def _run_analysis_job(job_id: uuid.UUID, user_id: uuid.UUID, goal_id: uuid.UUID):
+    report = TimingReport(f"analysis_job:{job_id}")
+    async with AsyncSessionLocal() as db:
+        try:
+            async with timed_step(report, "ensure_collection"):
+                await ensure_collection()
+            await _update_job_step(job_id, "profile")
 
             job_result = await db.execute(select(AnalysisJob).where(AnalysisJob.id == job_id))
             job = job_result.scalar_one()
@@ -45,41 +118,79 @@ async def _run_analysis_job(job_id: uuid.UUID, user_id: uuid.UUID, goal_id: uuid
                 "level": goal.level,
             }
 
-            result = await run_full_onboarding(
-                db,
-                user_id,
-                goal_data,
-                profile.resume_raw_text,
-                user.github_username,
-                user.github_access_token,
-            )
+            settings = get_settings()
 
-            profile.gap_analysis = result.get("gap_analysis")
-            profile.github_data = result.get("github_analysis")
-            if resume_analysis := result.get("resume_analysis"):
-                profile.skills_extracted = {"analysis": resume_analysis}
+            if settings.split_onboarding_phases:
+                async with timed_step(report, "run_profile_phase"):
+                    profile_result = await run_profile_phase(
+                        db,
+                        user_id,
+                        goal_data,
+                        profile.resume_raw_text,
+                        user.github_username,
+                        user.github_access_token,
+                        resume_parsed=profile.resume_parsed,
+                    )
+
+                profile.gap_analysis = profile_result.get("gap_analysis")
+                profile.github_data = profile_result.get("github_analysis")
+                if resume_analysis := profile_result.get("resume_analysis"):
+                    profile.skills_extracted = {"analysis": resume_analysis}
+
+                progress = await get_or_create_progress(db, user_id, goal_id)
+                if gaps := profile_result.get("gap_analysis"):
+                    progress.readiness_score = gaps.get("readiness_score")
+
+                gaps_payload = {
+                    "gap_analysis": profile_result.get("gap_analysis"),
+                    "readiness_score": profile_result.get("gap_analysis", {}).get("readiness_score"),
+                    "phase": "gaps_ready",
+                }
+                await _update_job_step(job_id, "gaps_ready", gaps_payload)
+                await db.commit()
+
+                await _update_job_step(job_id, "roadmap")
+                async with timed_step(report, "run_roadmap_phase"):
+                    roadmap_result = await run_roadmap_phase(
+                        db,
+                        user_id,
+                        goal_data,
+                        profile.resume_raw_text,
+                        user.github_username,
+                        profile_result,
+                        resume_parsed=profile.resume_parsed,
+                    )
+                result = {**profile_result, **roadmap_result}
+            else:
+                async with timed_step(report, "run_full_onboarding"):
+                    result = await run_full_onboarding(
+                        db,
+                        user_id,
+                        goal_data,
+                        profile.resume_raw_text,
+                        user.github_username,
+                        user.github_access_token,
+                        resume_parsed=profile.resume_parsed,
+                        on_step=lambda step: _update_job_step(job_id, step),
+                    )
+
+                profile.gap_analysis = result.get("gap_analysis")
+                profile.github_data = result.get("github_analysis")
+                if resume_analysis := result.get("resume_analysis"):
+                    profile.skills_extracted = {"analysis": resume_analysis}
+
+            await _update_job_step(job_id, "saving")
 
             roadmap_data = result.get("roadmap", {})
-            roadmap = Roadmap(
-                user_id=user_id,
-                goal_id=goal_id,
-                title=roadmap_data.get("title", f"Roadmap for {goal.target_company}"),
-                milestones=roadmap_data.get("milestones", []),
-                status="active",
-            )
-            db.add(roadmap)
-            await db.flush()
-
-            for m in roadmap_data.get("milestones", []):
-                milestone = Milestone(
-                    roadmap_id=roadmap.id,
-                    title=m.get("title", ""),
-                    description=m.get("description"),
-                    week_start=m.get("week_start"),
-                    week_end=m.get("week_end"),
-                    tasks=[t if isinstance(t, dict) else {"title": str(t)} for t in m.get("tasks", [])],
+            service = RoadmapService()
+            async with timed_step(report, "persist_roadmap"):
+                roadmap = await service.persist_roadmap(
+                    db, user_id, goal_id, roadmap_data, write_memory=False
                 )
-                db.add(milestone)
+
+            progress = await get_or_create_progress(db, user_id, goal_id)
+            if gaps := result.get("gap_analysis"):
+                progress.readiness_score = gaps.get("readiness_score")
 
             job.status = "completed"
             job.result = {
@@ -89,6 +200,15 @@ async def _run_analysis_job(job_id: uuid.UUID, user_id: uuid.UUID, goal_id: uuid
             }
             job.completed_at = datetime.now(timezone.utc)
             await db.commit()
+
+            report.log_summary({"job_id": str(job_id), "status": "completed"})
+
+            # Defer vector memory writes — off critical path after user sees dashboard
+            pending = result.get("pending_memory_chunks") or _collect_memory_chunks_from_state(result)
+            if pending or roadmap_data:
+                asyncio.create_task(
+                    _write_deferred_memory(user_id, goal_id, roadmap.id, pending, roadmap_data)
+                )
         except Exception as e:
             await db.rollback()
             async with AsyncSessionLocal() as err_db:
@@ -124,6 +244,9 @@ async def run_analysis(
     job = AnalysisJob(user_id=user.id, goal_id=goal.id, status="running")
     db.add(job)
     await db.flush()
+    await db.refresh(job)
+    # Commit before returning so the client can poll GET /jobs/{id} immediately.
+    await db.commit()
 
     background_tasks.add_task(_run_analysis_job, job.id, user.id, goal.id)
 

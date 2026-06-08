@@ -47,6 +47,14 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
     return "\n".join(text_parts).strip()
 
 
+def extract_resume_fast(file_bytes: bytes) -> tuple[str, dict[str, Any]]:
+    """PDF text only — no LLM. Used on upload to avoid blocking the UI."""
+    raw_text = extract_text_from_pdf(file_bytes)
+    if not raw_text:
+        raise ValueError("Could not extract text from PDF")
+    return raw_text, {"summary": raw_text[:2000], "skills": []}
+
+
 async def parse_resume(file_bytes: bytes) -> tuple[str, dict[str, Any]]:
     raw_text = extract_text_from_pdf(file_bytes)
     if not raw_text:

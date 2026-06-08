@@ -1,6 +1,7 @@
 from app.models.base import (
     AnalysisJob,
     Base,
+    CompletedTask,
     Goal,
     InterviewSession,
     InterviewTurn,
@@ -8,12 +9,16 @@ from app.models.base import (
     Milestone,
     Profile,
     Roadmap,
+    StudySession,
     User,
+    UserProgress,
+    WeakArea,
 )
 
 __all__ = [
     "AnalysisJob",
     "Base",
+    "CompletedTask",
     "Goal",
     "InterviewSession",
     "InterviewTurn",
@@ -21,5 +26,8 @@ __all__ = [
     "Milestone",
     "Profile",
     "Roadmap",
+    "StudySession",
     "User",
+    "UserProgress",
+    "WeakArea",
 ]

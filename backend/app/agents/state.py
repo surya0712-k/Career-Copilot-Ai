@@ -12,6 +12,7 @@ class AgentState(TypedDict, total=False):
     target_role: str
     level: str
     resume_text: str
+    resume_parsed: dict[str, Any]
     resume_analysis: dict[str, Any]
     github_username: str
     github_analysis: dict[str, Any]
