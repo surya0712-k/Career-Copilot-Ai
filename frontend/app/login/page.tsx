@@ -7,7 +7,7 @@ export default function LoginPage() {
   const configured = isGitHubAuthConfigured();
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-6">
+    <main className="flex min-h-screen min-h-[100dvh] items-center justify-center px-4 py-8 sm:px-6">
       <div className="card w-full max-w-md text-center">
         <Brain className="mx-auto mb-4 h-12 w-12 text-brand-500" />
         <h1 className="mb-2 text-2xl font-bold">Welcome Back</h1>

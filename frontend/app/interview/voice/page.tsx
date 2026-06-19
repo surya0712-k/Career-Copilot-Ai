@@ -148,7 +148,7 @@ function VoiceInterviewContent() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-6">
+    <main className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center px-4 py-8 sm:px-6">
       <div className="card w-full max-w-md text-center">
         <Link
           href={roadmapId ? `/roadmap/${roadmapId}` : "/dashboard"}
@@ -158,7 +158,7 @@ function VoiceInterviewContent() {
         </Link>
 
         {focusLabel && (
-          <p className="mb-4 rounded-lg bg-brand-600/20 px-3 py-2 text-sm text-brand-300">
+          <p className="mb-4 rounded-lg bg-brand-600/20 px-3 py-2 text-left text-sm leading-snug text-brand-300 sm:text-center">
             Focus: {focusLabel}
           </p>
         )}
@@ -177,17 +177,17 @@ function VoiceInterviewContent() {
         <div ref={audioContainerRef} className="hidden" aria-hidden />
 
         {connected && (
-          <div className="flex justify-center gap-4">
+          <div className="flex justify-center gap-6 sm:gap-4">
             <button
               onClick={toggleMute}
-              className="flex h-14 w-14 items-center justify-center rounded-full border border-white/20 bg-white/5 hover:bg-white/10"
+              className="flex h-16 w-16 items-center justify-center rounded-full border border-white/20 bg-white/5 hover:bg-white/10 active:scale-95 sm:h-14 sm:w-14"
               aria-label={muted ? "Unmute" : "Mute"}
             >
               {muted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
             </button>
             <button
               onClick={endCall}
-              className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 hover:bg-red-700"
+              className="flex h-16 w-16 items-center justify-center rounded-full bg-red-600 hover:bg-red-700 active:scale-95 sm:h-14 sm:w-14"
               aria-label="End interview"
             >
               <PhoneOff className="h-6 w-6" />

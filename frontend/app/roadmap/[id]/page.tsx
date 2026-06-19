@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api, DsaLanguage, Goal, Milestone, PracticeProject, Roadmap } from "@/lib/api";
+import { AppNav } from "@/components/AppNav";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
+import { PageHeader } from "@/components/PageHeader";
 import { displayProjectTitle, isMockInterviewTask, partitionTasks } from "@/lib/roadmapTasks";
-import { ArrowLeft, CheckCircle2, Circle, Mic, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { CheckCircle2, Circle, Mic, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 const DSA_LANGUAGES: { value: DsaLanguage; label: string }[] = [
   { value: "python", label: "Python" },
@@ -67,12 +69,14 @@ export default function RoadmapPage() {
   const [customProjects, setCustomProjects] = useState<PracticeProject[]>([]);
   const [savingProjects, setSavingProjects] = useState(false);
   const [projectsSaved, setProjectsSaved] = useState(false);
+  const [user, setUser] = useState<Awaited<ReturnType<typeof api.getMe>> | null>(null);
 
   const load = useCallback(async () => {
     const rm = await api.getRoadmap(params.id as string);
     setRoadmap(rm);
-    const g = await api.getActiveGoal();
+    const [g, u] = await Promise.all([api.getActiveGoal(), api.getMe().catch(() => null)]);
     setGoal(g);
+    setUser(u);
     if (g?.id === rm.goal_id) {
       const saved = await api.getPracticeProjects(g.id).catch(() => []);
       setCustomProjects(saved);
@@ -153,6 +157,11 @@ export default function RoadmapPage() {
     router.push(`/interview/voice?${qs.toString()}`);
   }
 
+  function logout() {
+    localStorage.removeItem("token");
+    router.push("/");
+  }
+
   function updateProject(index: number, field: keyof PracticeProject, value: string) {
     setCustomProjects((prev) => {
       const next = [...prev];
@@ -181,25 +190,22 @@ export default function RoadmapPage() {
   const pct = roadmap.completion_pct ?? 0;
 
   return (
-    <main className="min-h-screen px-6 py-8">
-      <div className="mx-auto max-w-3xl">
-        <Link href="/dashboard" className="mb-6 inline-flex items-center gap-2 text-sm text-white/60 hover:text-white">
-          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
-        </Link>
-
-        <div className="mb-6">
-          <h1 className="mb-2 text-3xl font-bold">{roadmap.title}</h1>
-          <p className="text-white/60 capitalize">
-            Status: {roadmap.status} · v{roadmap.version ?? 1}
-          </p>
-        </div>
+    <main className="min-h-screen min-h-[100dvh]">
+      <AppNav user={user} onLogout={logout} />
+      <div className="page-container-nav mx-auto w-full max-w-3xl lg:max-w-4xl xl:max-w-5xl">
+        <PageHeader
+          backHref="/dashboard"
+          backLabel="Back to Dashboard"
+          title={roadmap.title}
+          subtitle={`Status: ${roadmap.status} · v${roadmap.version ?? 1}`}
+        />
 
         <div className="card mb-6">
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="min-w-[200px] flex-1">
+          <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-end lg:justify-between">
+            <div className="w-full flex-1 md:min-w-[200px] lg:max-w-sm">
               <label className="mb-2 block text-sm font-medium">DSA coding language</label>
               <select
-                className="input w-full max-w-xs"
+                className="select input w-full sm:max-w-xs"
                 value={dsaLanguage}
                 onChange={(e) => saveLanguage(e.target.value as DsaLanguage)}
                 disabled={savingLang}
@@ -217,7 +223,7 @@ export default function RoadmapPage() {
             <button
               onClick={recalculate}
               disabled={recalculating}
-              className="btn-primary inline-flex items-center gap-2 text-sm"
+              className="btn-primary w-full gap-2 text-sm md:w-auto"
             >
               <RefreshCw className={`h-4 w-4 ${recalculating ? "animate-spin" : ""}`} />
               Recalculate roadmap
@@ -241,13 +247,13 @@ export default function RoadmapPage() {
 
             return (
               <div key={m.id ?? i} className="card">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-600 text-sm font-bold">
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-600 text-sm font-bold">
                       {i + 1}
                     </div>
-                    <div>
-                      <h2 className="font-semibold">{m.title}</h2>
+                    <div className="min-w-0">
+                      <h2 className="font-semibold leading-snug">{m.title}</h2>
                       <p className="text-sm text-white/50">
                         Week {i + 1}
                         {m.status && m.status !== "pending" && (
@@ -260,7 +266,7 @@ export default function RoadmapPage() {
                     <button
                       type="button"
                       onClick={() => startVoiceInterview(m.id)}
-                      className="btn-primary inline-flex shrink-0 items-center gap-2 text-xs"
+                      className="btn-primary w-full shrink-0 gap-2 text-xs sm:w-auto"
                     >
                       <Mic className="h-4 w-4" />
                       Voice mock
@@ -359,12 +365,12 @@ export default function RoadmapPage() {
               </div>
             )}
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               {customProjects.length < 2 && (
                 <button
                   type="button"
                   onClick={addCustomProjectSlot}
-                  className="btn-secondary inline-flex items-center gap-2 text-xs"
+                  className="btn-secondary w-full gap-2 text-xs sm:w-auto"
                 >
                   <Plus className="h-4 w-4" />
                   Add custom project
@@ -385,6 +391,7 @@ export default function RoadmapPage() {
           </div>
         )}
       </div>
+      <MobileBottomNav />
     </main>
   );
 }

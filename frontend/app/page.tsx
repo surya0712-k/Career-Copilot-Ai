@@ -6,32 +6,32 @@ import { getGitHubAuthUrl } from "@/lib/api";
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen">
-      <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <div className="flex items-center gap-2 text-xl font-bold">
-          <Brain className="h-8 w-8 text-brand-500" />
-          Career Copilot AI
+    <main className="min-h-screen min-h-[100dvh]">
+      <nav className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+        <div className="flex min-w-0 items-center gap-2 text-base font-bold sm:text-xl">
+          <Brain className="h-7 w-7 shrink-0 text-brand-500 sm:h-8 sm:w-8" />
+          <span className="truncate">Career Copilot AI</span>
         </div>
-        <Link href="/login" className="btn-primary">
+        <Link href="/login" className="btn-primary shrink-0 text-sm sm:text-base">
           Get Started
         </Link>
       </nav>
 
-      <section className="mx-auto max-w-4xl px-6 py-20 text-center">
-        <h1 className="mb-6 text-5xl font-bold leading-tight">
+      <section className="mx-auto max-w-4xl px-4 py-12 text-center sm:px-6 sm:py-16 md:py-20 lg:max-w-5xl lg:py-24">
+        <h1 className="mb-4 text-3xl font-bold leading-tight sm:mb-6 sm:text-4xl md:text-5xl lg:text-6xl">
           Your Agentic Career Coach
           <span className="block text-brand-500">with Memory</span>
         </h1>
-        <p className="mb-10 text-lg text-white/70">
+        <p className="mb-8 text-base text-white/70 sm:mb-10 sm:text-lg">
           Tell it &quot;I want a Google internship&quot; — it analyzes your resume and GitHub,
           finds skill gaps, builds a roadmap, conducts mock interviews, and tracks your progress.
         </p>
-        <a href={getGitHubAuthUrl()} className="btn-primary inline-flex items-center gap-2 text-lg">
+        <a href={getGitHubAuthUrl()} className="btn-primary inline-flex w-full max-w-sm items-center justify-center gap-2 sm:w-auto sm:text-lg">
           Sign in with GitHub <ArrowRight className="h-5 w-5" />
         </a>
       </section>
 
-      <section className="mx-auto grid max-w-5xl gap-6 px-6 pb-20 md:grid-cols-3">
+      <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-16 sm:gap-6 sm:px-6 sm:pb-20 md:grid-cols-2 lg:grid-cols-3 lg:gap-8 lg:px-8 lg:pb-24">
         {[
           {
             icon: Target,

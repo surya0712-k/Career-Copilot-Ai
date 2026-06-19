@@ -18,11 +18,11 @@ Be specific and actionable."""
 GAP_ANALYSIS_PROMPT = (
     "Compare candidate profile vs target role. "
     "Return critical gaps, nice-to-have gaps, strengths, recommendations, and readiness_score 0-10. "
-    "Score using evidence from resume skills, projects, experience, and GitHub — not generic defaults. "
-    "Rubric: 0-3 major gaps/weak profile; 4-5 some foundation but several critical gaps; "
-    "6-7 solid foundation with notable gaps; 8-9 strong fit minor gaps; 10 exceptional fit. "
-    "Differentiate clearly: weak profiles score below 5, strong profiles above 7. "
-    "Do NOT default to 6 or 6.5."
+    "List specific critical gaps for missing interview skills (DSA, systems design, LeetCode prep) "
+    "when absent — these matter more than missing nice-to-haves. "
+    "Strengths should cite resume/GitHub evidence. "
+    "For top-company SWE roles: missing algorithms/DSA is a critical gap even if projects are strong. "
+    "readiness_score is advisory; be harsh when core interview skills are missing."
 )
 
 ROADMAP_PROMPT = (

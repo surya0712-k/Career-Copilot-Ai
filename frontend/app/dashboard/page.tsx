@@ -11,11 +11,12 @@ import {
   Roadmap,
   User,
 } from "@/lib/api";
+import { AppNav } from "@/components/AppNav";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
 import {
   AlertTriangle,
   Brain,
   CheckCircle,
-  LogOut,
   MessageSquare,
   Mic,
   Target,
@@ -128,26 +129,12 @@ export default function DashboardPage() {
   const gaps = profile?.gap_analysis;
 
   return (
-    <main className="min-h-screen">
-      <nav className="border-b border-white/10 px-6 py-4">
-        <div className="mx-auto flex max-w-6xl items-center justify-between">
-          <div className="flex items-center gap-2 font-bold">
-            <Brain className="h-6 w-6 text-brand-500" />
-            Career Copilot
-          </div>
-          <div className="flex items-center gap-4">
-            {user?.avatar_url && (
-              <img src={user.avatar_url} alt="" className="h-8 w-8 rounded-full" />
-            )}
-            <span className="text-sm text-white/60">@{user?.github_username}</span>
-            <button onClick={logout} className="text-white/40 hover:text-white">
-              <LogOut className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-      </nav>
+    <main className="min-h-screen min-h-[100dvh]">
+      <AppNav user={user} onLogout={logout} />
 
-      <div className="mx-auto max-w-6xl px-6 py-8">
+      <div className="page-container-nav max-w-7xl">
+        <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_260px] xl:items-start xl:gap-10">
+        <div className="min-w-0 space-y-6 sm:space-y-8">
         {!goal && (
           <div className="card mb-8 text-center">
             <Target className="mx-auto mb-4 h-12 w-12 text-brand-500" />
@@ -164,28 +151,33 @@ export default function DashboardPage() {
         )}
 
         {goal && (
-          <div className="card mb-8">
-            <div className="flex items-center gap-3">
-              <Target className="h-6 w-6 text-brand-500" />
-              <div>
-                <h1 className="text-xl font-bold">
-                  {goal.target_company} — {goal.target_role}
-                </h1>
-                <p className="text-white/60 capitalize">{goal.level.replace("_", " ")}</p>
+          <div className="card mb-6 sm:mb-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-3">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                <Target className="mt-0.5 h-6 w-6 shrink-0 text-brand-500" />
+                <div className="min-w-0">
+                  <h1 className="text-lg font-bold leading-snug sm:text-xl">
+                    {goal.target_company} — {goal.target_role}
+                  </h1>
+                  <p className="text-sm text-white/60 capitalize">{goal.level.replace("_", " ")}</p>
+                </div>
               </div>
               {gaps?.readiness_score !== undefined && (
-                <div className="ml-auto text-right">
-                  <p className="text-3xl font-bold text-brand-500">
-                    {gaps.readiness_score.toFixed(1)}
-                  </p>
-                  <p className="text-xs text-white/40">Readiness / 10</p>
+                <div className="flex items-center justify-between gap-3 rounded-lg bg-brand-600/10 px-4 py-3 md:ml-auto md:block md:bg-transparent md:p-0 md:text-right">
+                  <span className="text-sm text-white/50 md:hidden">Readiness</span>
+                  <div>
+                    <p className="text-2xl font-bold text-brand-500 md:text-3xl lg:text-4xl">
+                      {gaps.readiness_score.toFixed(1)}
+                    </p>
+                    <p className="text-xs text-white/40">Readiness / 10</p>
+                  </div>
                 </div>
               )}
             </div>
           </div>
         )}
 
-        <div className="mb-8 grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-2 lg:gap-8">
           <div className="card">
             <h2 className="mb-4 flex items-center gap-2 font-semibold">
               <AlertTriangle className="h-5 w-5 text-yellow-400" />
@@ -236,9 +228,12 @@ export default function DashboardPage() {
 
         {roadmap && (
           <div className="card mb-8">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">{roadmap.title}</h2>
-              <Link href={`/roadmap/${roadmap.id}`} className="text-sm text-brand-500 hover:underline">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="font-semibold leading-snug">{roadmap.title}</h2>
+              <Link
+                href={`/roadmap/${roadmap.id}`}
+                className="btn-secondary w-full text-center text-sm sm:w-auto"
+              >
                 View Full Roadmap
               </Link>
             </div>
@@ -314,22 +309,16 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="flex flex-wrap gap-4">
-          <Link href="/coach" className="btn-primary inline-flex items-center gap-2">
+        <div className="action-grid xl:hidden">
+          <Link href="/coach" className="btn-primary">
             <Brain className="h-5 w-5" />
             Ask Coach
           </Link>
-          <Link
-            href="/interview/voice"
-            className="btn-primary inline-flex items-center gap-2"
-          >
+          <Link href="/interview/voice" className="btn-primary">
             <Mic className="h-5 w-5" />
-            Voice Interview (LiveKit)
+            Voice Interview
           </Link>
-          <Link
-            href="/interview/new"
-            className="btn-secondary inline-flex items-center gap-2"
-          >
+          <Link href="/interview/new" className="btn-secondary">
             <MessageSquare className="h-5 w-5" />
             Text Interview
           </Link>
@@ -338,13 +327,43 @@ export default function DashboardPage() {
               Update Goal
             </Link>
           ) : (
-            <Link href="/onboarding" className="btn-primary inline-flex items-center gap-2">
+            <Link href="/onboarding" className="btn-primary">
               <Target className="h-5 w-5" />
               Add a Goal
             </Link>
           )}
         </div>
+        </div>
+
+        <aside className="hidden xl:block">
+          <div className="card sticky top-24 space-y-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-white/40">Quick actions</p>
+            <Link href="/coach" className="btn-primary w-full">
+              <Brain className="h-5 w-5" />
+              Ask Coach
+            </Link>
+            <Link href="/interview/voice" className="btn-primary w-full">
+              <Mic className="h-5 w-5" />
+              Voice Interview
+            </Link>
+            <Link href="/interview/new" className="btn-secondary w-full">
+              <MessageSquare className="h-5 w-5" />
+              Text Interview
+            </Link>
+            <Link href="/onboarding" className="btn-secondary w-full">
+              <Target className="h-5 w-5" />
+              {goal ? "Update Goal" : "Add a Goal"}
+            </Link>
+            {roadmap && (
+              <Link href={`/roadmap/${roadmap.id}`} className="btn-secondary w-full text-center text-sm">
+                View Roadmap
+              </Link>
+            )}
+          </div>
+        </aside>
+        </div>
       </div>
+      <MobileBottomNav />
     </main>
   );
 }

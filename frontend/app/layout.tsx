@@ -9,6 +9,14 @@ export const metadata: Metadata = {
   description: "Agentic career coach with memory",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: "#0f172a",
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -16,7 +24,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className} suppressHydrationWarning>
+      <body className={`${inter.className} overflow-x-hidden antialiased`} suppressHydrationWarning>
         {children}
       </body>
     </html>

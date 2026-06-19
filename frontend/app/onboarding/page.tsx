@@ -4,6 +4,8 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { AppNav } from "@/components/AppNav";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { ArrowLeft, Brain, Upload } from "lucide-react";
 
 const LEVELS = [
@@ -25,6 +27,7 @@ export default function OnboardingPage() {
   const [checkingProfile, setCheckingProfile] = useState(true);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [user, setUser] = useState<Awaited<ReturnType<typeof api.getMe>> | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -33,15 +36,12 @@ export default function OnboardingPage() {
       return;
     }
 
-    api
-      .getProfile()
-      .then((profile) => {
-        if (profile.resume_parsed) {
+    Promise.all([api.getProfile().catch(() => null), api.getMe()])
+      .then(([profile, u]) => {
+        setUser(u);
+        if (profile?.resume_parsed) {
           setHasResume(true);
         }
-      })
-      .catch(() => {
-        /* new user — no profile yet */
       })
       .finally(() => setCheckingProfile(false));
   }, [router]);
@@ -113,6 +113,11 @@ export default function OnboardingPage() {
     }
   }
 
+  function logout() {
+    localStorage.removeItem("token");
+    router.push("/");
+  }
+
   if (checkingProfile) {
     return (
       <main className="flex min-h-screen items-center justify-center">
@@ -122,18 +127,19 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className="min-h-screen px-6 py-12">
-      <div className="mx-auto max-w-2xl">
+    <main className="min-h-screen min-h-[100dvh]">
+      <AppNav user={user} onLogout={logout} />
+      <div className="page-container-nav mx-auto w-full max-w-2xl lg:max-w-3xl">
         <Link
           href="/dashboard"
-          className="mb-6 inline-flex items-center gap-2 text-sm text-white/60 hover:text-white"
+          className="mb-6 inline-flex min-h-[44px] items-center gap-2 text-sm text-white/60 hover:text-white lg:hidden"
         >
           <ArrowLeft className="h-4 w-4" /> Back to Dashboard
         </Link>
 
-        <div className="mb-8 flex items-center gap-2">
-          <Brain className="h-8 w-8 text-brand-500" />
-          <h1 className="text-2xl font-bold">Set Up Your Career Goal</h1>
+        <div className="mb-6 flex items-center gap-2 sm:mb-8">
+          <Brain className="h-7 w-7 shrink-0 text-brand-500 sm:h-8 sm:w-8" />
+          <h1 className="text-xl font-bold sm:text-2xl">Set Up Your Career Goal</h1>
         </div>
 
         <div className="mb-8 flex gap-2">
@@ -154,7 +160,7 @@ export default function OnboardingPage() {
                   Resume already on file. Upload a new PDF to replace it, or continue to set your goal.
                 </p>
               )}
-              <label className="flex cursor-pointer flex-col items-center gap-4 rounded-lg border-2 border-dashed border-white/20 p-10 transition hover:border-brand-500">
+              <label className="flex cursor-pointer flex-col items-center gap-4 rounded-lg border-2 border-dashed border-white/20 p-6 transition hover:border-brand-500 sm:p-10">
                 <Upload className="h-10 w-10 text-white/40" />
                 <span className="text-white/60">
                   {resumeFile ? resumeFile.name : "Click to upload PDF resume"}
@@ -202,7 +208,7 @@ export default function OnboardingPage() {
               </div>
               <div>
                 <label className="mb-2 block text-sm text-white/60">Level</label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {LEVELS.map((item) => (
                     <button
                       key={item.value}
@@ -223,11 +229,11 @@ export default function OnboardingPage() {
               {loading && progressLabel && (
                 <p className="text-sm text-brand-300">{progressLabel}</p>
               )}
-              <div className="flex gap-3">
-                <button type="button" className="btn-secondary" onClick={() => setStep(1)}>
+              <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                <button type="button" className="btn-secondary w-full sm:w-auto" onClick={() => setStep(1)}>
                   Back
                 </button>
-                <button type="submit" className="btn-primary flex-1" disabled={loading}>
+                <button type="submit" className="btn-primary w-full flex-1" disabled={loading}>
                   {loading ? progressLabel || "Analyzing your profile..." : "Start Analysis"}
                 </button>
               </div>
@@ -235,6 +241,7 @@ export default function OnboardingPage() {
           )}
         </form>
       </div>
+      <MobileBottomNav />
     </main>
   );
 }

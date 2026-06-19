@@ -121,20 +121,20 @@ export default function NewInterviewPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col">
-      <header className="border-b border-white/10 px-6 py-4">
-        <div className="mx-auto flex max-w-3xl items-center gap-4">
-          <Link href="/dashboard" className="text-white/60 hover:text-white">
+    <main className="flex min-h-screen min-h-[100dvh] flex-col">
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#0f172a]/90 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4">
+        <div className="mx-auto flex max-w-3xl items-center gap-3">
+          <Link href="/dashboard" className="touch-target flex items-center text-white/60 hover:text-white">
             <ArrowLeft className="h-5 w-5" />
           </Link>
-          <div>
-            <h1 className="font-semibold">Mock Interview</h1>
-            <p className="text-sm text-white/50">{session?.role_context}</p>
+          <div className="min-w-0">
+            <h1 className="truncate font-semibold">Mock Interview</h1>
+            <p className="truncate text-xs text-white/50 sm:text-sm">{session?.role_context}</p>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-6">
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-4 sm:px-6 sm:py-6 lg:max-w-4xl lg:py-8">
         <div className="flex-1 space-y-4 overflow-y-auto pb-4">
           {messages.map((msg, i) => (
             <div
@@ -142,7 +142,7 @@ export default function NewInterviewPage() {
               className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[80%] rounded-xl px-4 py-3 text-sm ${
+                className={`max-w-[92%] rounded-xl px-4 py-3 text-sm sm:max-w-[80%] ${
                   msg.role === "user"
                     ? "bg-brand-600 text-white"
                     : msg.role === "feedback"
@@ -168,9 +168,13 @@ export default function NewInterviewPage() {
         </div>
 
         {!completed ? (
-          <form onSubmit={handleSubmit} className="flex gap-3 border-t border-white/10 pt-4">
+          <form
+            onSubmit={handleSubmit}
+            className="sticky-composer flex gap-2 sm:gap-3 lg:pt-4"
+            style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+          >
             <textarea
-              className="input flex-1 resize-none"
+              className="input min-h-[44px] flex-1 resize-none text-base"
               rows={2}
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
@@ -179,8 +183,9 @@ export default function NewInterviewPage() {
             />
             <button
               type="submit"
-              className="btn-primary self-end"
+              className="btn-primary shrink-0 self-end"
               disabled={loading || !answer.trim()}
+              aria-label="Send answer"
             >
               {loading ? (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
